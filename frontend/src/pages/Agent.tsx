@@ -102,7 +102,15 @@ export function AgentPage() {
         <div className="space-y-4">
           <Card title="Start a run" description="Select the gaps to address (all open by default).">
             {gaps.length === 0 ? (
-              <EmptyState title="No open gaps" hint="Complete an assessment first." />
+              <>
+                <EmptyState title="No open gaps" hint="Take an assessment to identify areas to work on." />
+                <Link
+                  to="/assessment"
+                  className="mt-3 inline-block rounded-md bg-brand-500 px-4 py-2 text-sm font-medium text-white hover:bg-brand-600"
+                >
+                  Take an assessment
+                </Link>
+              </>
             ) : (
               <>
                 <ul className="space-y-1">
@@ -137,7 +145,7 @@ export function AgentPage() {
             )}
           </Card>
 
-          {activeRun && <RunDetail run={activeRun} />}
+          {activeRun && <RunDetail run={activeRun} gaps={gaps} />}
 
           <Card title="Past runs" description="Every run keeps its observable step history.">
             {runs.length === 0 ? (
@@ -179,11 +187,51 @@ export function StatusBadge({ status }: { status: string }) {
   );
 }
 
-export function RunDetail({ run }: { run: AgentRun }) {
+function gapIdsFromRun(run: AgentRun): number[] {
+  const fromContext = (run.input_context as { gap_ids?: unknown }).gap_ids;
+  if (Array.isArray(fromContext) && fromContext.every((v) => typeof v === "number")) {
+    return fromContext as number[];
+  }
+  for (const e of run.events) {
+    const payload = e.payload as { gap_ids?: unknown };
+    if (e.kind === "gaps_examined" && Array.isArray(payload.gap_ids)) {
+      return (payload.gap_ids as unknown[]).filter((v): v is number => typeof v === "number");
+    }
+  }
+  return [];
+}
+
+export function RunDetail({ run, gaps }: { run: AgentRun; gaps: LearningGap[] }) {
   const result = run.result as { plan_id?: number; report_id?: number; message?: string };
   const error = run.error as { step?: string; message?: string };
+  const planReady = run.status === "succeeded" && typeof result?.plan_id === "number";
+  const addressed = planReady
+    ? gapIdsFromRun(run)
+        .map((id) => gaps.find((g) => g.id === id))
+        .filter((g): g is LearningGap => g !== undefined)
+    : [];
   return (
     <Card title={`Run #${run.id}`} description={`Status: ${run.status}`}>
+      {planReady && (
+        <div className="mb-4 rounded-lg border border-emerald-200 bg-emerald-50 p-4">
+          <p className="text-base font-semibold text-emerald-900">
+            Your personalized study plan is ready.
+          </p>
+          <p className="mt-1 text-sm text-emerald-800">
+            {addressed.length > 0
+              ? `Built from ${addressed.length} learning gap${addressed.length === 1 ? "" : "s"}: ${addressed
+                  .map((g) => `${g.subject} · ${g.topic}`)
+                  .join("; ")}.`
+              : "Built from your current learning gaps."}
+          </p>
+          <Link
+            to="/plan"
+            className="mt-3 inline-block rounded-md bg-emerald-700 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-800"
+          >
+            View my study plan →
+          </Link>
+        </div>
+      )}
       {run.status === "failed" && error?.message && (
         <div className="mb-3">
           <ErrorState message={`${error.step ?? "run"}: ${error.message}`} />

@@ -10,11 +10,98 @@ import type {
   Paginated,
   Progress,
   StudyPlan,
+  StudyPlanItem,
 } from "../types/domain";
 import { StatusBadge } from "./Agent";
 
 function isActive(plan: StudyPlan): boolean {
   return plan.status === "active";
+}
+
+function statusOf(
+  item: StudyPlanItem,
+  progressByItem: Map<number, Progress>,
+): string {
+  return progressByItem.get(item.id)?.status ?? item.status;
+}
+
+function NextUpCard({
+  items,
+  gapsById,
+  resourcesById,
+  progressByItem,
+  onMarkComplete,
+  completingId,
+}: {
+  items: StudyPlanItem[];
+  gapsById: Map<number, LearningGap>;
+  resourcesById: Map<number, LearningResource>;
+  progressByItem: Map<number, Progress>;
+  onMarkComplete: (itemId: number) => void;
+  completingId: number | null;
+}) {
+  if (items.length === 0) return null;
+  const current = items.find((i) => statusOf(i, progressByItem) === "in_progress") ?? null;
+  const next = current ?? items.find((i) => statusOf(i, progressByItem) !== "completed") ?? null;
+  if (!next) {
+    return (
+      <Card title="Plan complete" description="Every activity in this plan is done.">
+        <p className="text-sm text-slate-600">
+          Nice work — you finished all {items.length} activit{items.length === 1 ? "y" : "ies"}.
+          Review your overall advancement on the Progress page.
+        </p>
+        <Link
+          to="/progress"
+          className="mt-3 inline-block rounded-md bg-brand-500 px-4 py-2 text-sm font-medium text-white hover:bg-brand-600"
+        >
+          View progress →
+        </Link>
+      </Card>
+    );
+  }
+  const gap = next.learning_gap !== null ? gapsById.get(next.learning_gap) : undefined;
+  const resource = next.resource !== null ? resourcesById.get(next.resource) : undefined;
+  const progress = progressByItem.get(next.id);
+  const busy = completingId === next.id;
+  return (
+    <Card
+      title={current ? "Current activity" : "Next up"}
+      description="The clearest next thing to do in this plan."
+    >
+      <p className="text-base font-semibold">
+        Step {next.ordering}: {next.title}
+      </p>
+      {gap && (
+        <p className="mt-1 text-sm text-slate-600">
+          Improves: {gap.subject} / {gap.topic}
+        </p>
+      )}
+      <div className="mt-3 flex flex-wrap gap-2">
+        {resource?.url ? (
+          <a
+            href={resource.url}
+            target="_blank"
+            rel="noreferrer"
+            className="rounded-md bg-brand-500 px-4 py-2 text-sm font-medium text-white hover:bg-brand-600"
+          >
+            Start learning →
+          </a>
+        ) : (
+          progress &&
+          progress.status !== "completed" && (
+            <button
+              type="button"
+              onClick={() => onMarkComplete(next.id)}
+              disabled={busy}
+              className="rounded-md bg-brand-500 px-4 py-2 text-sm font-medium text-white hover:bg-brand-600 disabled:opacity-50"
+            >
+              {busy ? "Saving…" : "Mark complete"}
+            </button>
+          )
+        )}
+      </div>
+    </Card>
+  );
 }
 
 export function LearningPlanPage() {
@@ -182,7 +269,7 @@ export function LearningPlanPage() {
                   <StatusBadge status={plan.status} />
                   {plan.origin === "agent" && (
                     <span className="rounded-full bg-brand-50 px-2.5 py-0.5 text-xs font-medium text-brand-700">
-                      Built by Study Agent{plan.agent_run !== null ? ` · run #${plan.agent_run}` : ""}
+                      Created by Study Agent
                     </span>
                   )}
                 </div>
@@ -202,7 +289,22 @@ export function LearningPlanPage() {
                 >
                   Browse resources for this plan →
                 </Link>
+                <Link
+                  to="/progress"
+                  className="mt-3 inline-block text-sm font-medium text-brand-600 hover:underline sm:ml-4"
+                >
+                  Track progress →
+                </Link>
               </Card>
+
+              <NextUpCard
+                items={items}
+                gapsById={gapsById}
+                resourcesById={resourcesById}
+                progressByItem={progressByItem}
+                onMarkComplete={(itemId) => void markComplete(itemId)}
+                completingId={completingId}
+              />
 
               {actionError && (
                 <ErrorState message={actionError} />
@@ -235,13 +337,13 @@ export function LearningPlanPage() {
                         )}
                         {gap && (
                           <p className="mt-1 text-sm text-slate-600">
-                            <span className="font-medium">Gap:</span> {gap.subject} / {gap.topic}{" "}
+                            <span className="font-medium">Related gap:</span> {gap.subject} / {gap.topic}{" "}
                             <span className="text-xs text-slate-400">({gap.severity})</span>
                           </p>
                         )}
                         {item.rationale && (
                           <p className="mt-1 text-sm text-slate-600">
-                            <span className="font-medium">Why this helps:</span> {item.rationale}
+                            <span className="font-medium">Why this is in your plan:</span> {item.rationale}
                           </p>
                         )}
                         <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-500">
@@ -252,19 +354,21 @@ export function LearningPlanPage() {
                           {progress?.completed_at && <span>Completed: {progress.completed_at}</span>}
                         </div>
                         {resource && (
-                          <div className="mt-2 text-sm">
-                            <span className="font-medium">Resource:</span>{" "}
+                          <div className="mt-3">
+                            <p className="text-sm text-slate-600">
+                              <span className="font-medium">Resource:</span> {resource.title}
+                            </p>
                             {resource.url ? (
                               <a
                                 href={resource.url}
                                 target="_blank"
                                 rel="noreferrer"
-                                className="text-brand-600 hover:underline"
+                                className="mt-2 inline-block rounded-md border border-slate-300 px-4 py-2 text-sm font-medium hover:bg-slate-100"
                               >
-                                {resource.title}
+                                Open resource →
                               </a>
                             ) : (
-                              <span className="text-slate-600">{resource.title}</span>
+                              <p className="mt-1 text-xs text-slate-400">No link provided for this resource</p>
                             )}
                           </div>
                         )}
