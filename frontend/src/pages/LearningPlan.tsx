@@ -196,6 +196,12 @@ export function LearningPlanPage() {
                     <dd>{plan.target_date || "—"}</dd>
                   </div>
                 </dl>
+                <Link
+                  to="/resources"
+                  className="mt-3 inline-block text-sm font-medium text-brand-600 hover:underline"
+                >
+                  Browse resources for this plan →
+                </Link>
               </Card>
 
               {actionError && (

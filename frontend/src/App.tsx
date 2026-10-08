@@ -5,12 +5,10 @@ import { AssessmentPage } from "./pages/Assessment";
 import { DashboardPage } from "./pages/Dashboard";
 import { LearningPlanPage } from "./pages/LearningPlan";
 import { LoginPage } from "./pages/Login";
+import { ProgressPage } from "./pages/Progress";
 import { ReportPage } from "./pages/Report";
-import {
-  NotFoundPage,
-  ProgressPage,
-  ResourcesPage,
-} from "./pages/Placeholder";
+import { ResourcesPage } from "./pages/Resources";
+import { NotFoundPage } from "./pages/Placeholder";
 
 export default function App() {
   return (
