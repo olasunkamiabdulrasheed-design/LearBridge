@@ -6,8 +6,7 @@
 # Postgres (free accounts allow only one). Paste the connection string into the
 # DATABASE_URL prompt at blueprint creation, or set it later in the dashboard.
 #
-# After the first deploy, open the service and set the values marked TODO below
-# to match your real URLs (Render will show the API host; Vercel shows the app URL).
+# CORS/CSRF values below are set to the live Vercel + Render URLs.
 
 services:
   - type: web
@@ -31,12 +30,12 @@ services:
       # Leading dot matches any *.onrender.com subdomain (service name may vary).
       - key: DJANGO_ALLOWED_HOSTS
         value: ".onrender.com,localhost,127.0.0.1"
-      # TODO: replace with your Vercel URL(s), comma-separated.
+      # Vercel frontend origin(s), comma-separated.
       - key: DJANGO_CORS_ALLOWED_ORIGINS
-        value: "https://learnbridge.vercel.app"
-      # TODO: replace with https://<your-service>.onrender.com
+        value: "https://lear-bridge.vercel.app"
+      # Public API URL (Django admin/session over HTTPS).
       - key: DJANGO_CSRF_TRUSTED_ORIGINS
-        value: "https://learnbridge-api.onrender.com"
+        value: "https://learnbridge-api-bhu1.onrender.com"
       # Existing Render Postgres connection string. Paste at blueprint creation
       # (Internal URL if the web service is in the same region, else External).
       - key: DATABASE_URL
