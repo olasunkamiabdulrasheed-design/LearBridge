@@ -1,53 +1,59 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { Card, PageHeader } from "../components/layout/Page";
+import { Icon } from "../components/ui/icons";
 import { ErrorState, LoadingState } from "../components/ui/States";
 import { useAuth } from "../context/AuthContext";
 import { apiFetch } from "../services/apiClient";
 import { fetchHealth, type HealthResponse } from "../services/health";
-import type { LearningGap, Paginated, StudyPlan } from "../types/domain";
+import type { Attempt, LearningGap, Paginated, Progress as ProgressRow, StudyPlan } from "../types/domain";
 
-interface DashboardData {
-  gapCount: number;
-  planCount: number;
+function greeting(): string {
+  const h = new Date().getHours();
+  if (h < 12) return "Good morning";
+  if (h < 18) return "Good afternoon";
+  return "Good evening";
 }
 
 export function DashboardPage() {
-  const { user, profile, isAuthenticated, initializing } = useAuth();
+  const { user, isAuthenticated, initializing } = useAuth();
   const [health, setHealth] = useState<HealthResponse | null>(null);
-  const [healthLoading, setHealthLoading] = useState(true);
   const [healthError, setHealthError] = useState<string | null>(null);
-  const [data, setData] = useState<DashboardData | null>(null);
-  const [dataLoading, setDataLoading] = useState(false);
-  const [dataError, setDataError] = useState<string | null>(null);
+  const [gaps, setGaps] = useState<LearningGap[]>([]);
+  const [plans, setPlans] = useState<StudyPlan[]>([]);
+  const [attempts, setAttempts] = useState<Attempt[]>([]);
+  const [progressRows, setProgressRows] = useState<ProgressRow[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const loadHealth = useCallback(async () => {
-    setHealthLoading(true);
-    setHealthError(null);
     try {
       setHealth(await fetchHealth());
+      setHealthError(null);
     } catch (e) {
       setHealthError(e instanceof Error ? e.message : "Unable to reach the API.");
       setHealth(null);
-    } finally {
-      setHealthLoading(false);
     }
   }, []);
 
   const loadData = useCallback(async () => {
-    setDataLoading(true);
-    setDataError(null);
+    setLoading(true);
+    setError(null);
     try {
-      const [gaps, plans] = await Promise.all([
-        apiFetch<Paginated<LearningGap>>("/gaps/?page_size=1"),
-        apiFetch<Paginated<StudyPlan>>("/study-plans/?page_size=1"),
+      const [gapPage, planPage, attemptPage, progressPage] = await Promise.all([
+        apiFetch<Paginated<LearningGap>>("/gaps/?page_size=100"),
+        apiFetch<Paginated<StudyPlan>>("/study-plans/?page_size=100"),
+        apiFetch<Paginated<Attempt>>("/attempts/?status=completed&page_size=100"),
+        apiFetch<Paginated<ProgressRow>>("/progress/?page_size=100"),
       ]);
-      setData({ gapCount: gaps.count, planCount: plans.count });
+      setGaps(gapPage.results);
+      setPlans(planPage.results);
+      setAttempts(attemptPage.results);
+      setProgressRows(progressPage.results);
     } catch (e) {
-      setDataError(e instanceof Error ? e.message : "Unable to load dashboard data.");
-      setData(null);
+      setError(e instanceof Error ? e.message : "Unable to load dashboard data.");
     } finally {
-      setDataLoading(false);
+      setLoading(false);
     }
   }, []);
 
@@ -59,75 +65,161 @@ export function DashboardPage() {
     if (!initializing && isAuthenticated) void loadData();
   }, [initializing, isAuthenticated, loadData]);
 
-  return (
-    <div>
-      <PageHeader
-        title={user ? `Welcome, ${user.username}` : "Student Dashboard"}
-        subtitle="Learning gaps, study plans, and progress at a glance."
-      />
+  const openGaps = useMemo(
+    () => gaps.filter((g) => g.status === "open" || g.status === "in_progress"),
+    [gaps],
+  );
+  const activePlan = useMemo(
+    () => plans.find((p) => p.status === "active") ?? null,
+    [plans],
+  );
+  const latestAttempt = useMemo(() => {
+    const done = attempts.filter((a) => a.completed_at);
+    done.sort(
+      (a, b) => new Date(b.completed_at as string).getTime() - new Date(a.completed_at as string).getTime(),
+    );
+    return done[0] ?? null;
+  }, [attempts]);
+  const nextStep = useMemo(() => {
+    if (activePlan) {
+      const items = [...(activePlan.items ?? [])].sort((a, b) => a.ordering - b.ordering);
+      const doneIds = new Set(
+        progressRows
+          .filter((p) => p.status === "completed")
+          .map((p) => p.study_plan_item),
+      );
+      const next = items.find((i) => !doneIds.has(i.id));
+      if (next) {
+        return {
+          eyebrow: "Resume learning",
+          title: `Step ${next.ordering}: ${next.title}`,
+          text: activePlan.title,
+          to: "/plan",
+          cta: "Continue plan",
+        };
+      }
+      return {
+        eyebrow: "Plan complete",
+        title: activePlan.title,
+        text: "Every activity is done — review your improvement or re-assess.",
+        to: "/progress",
+        cta: "View progress",
+      };
+    }
+    if (openGaps.length > 0) {
+      return {
+        eyebrow: "Recommended next",
+        title: `${openGaps.length} open gap${openGaps.length === 1 ? "" : "s"} to address`,
+        text: openGaps.slice(0, 3).map((g) => `${g.subject} · ${g.topic}`).join("; "),
+        to: "/agent",
+        cta: "Open Study Agent",
+      };
+    }
+    return {
+      eyebrow: "Get started",
+      title: "Take your first diagnostic",
+      text: "A short assessment reveals exactly where to focus.",
+      to: "/assessment",
+      cta: "Browse assessments",
+    };
+  }, [activePlan, openGaps, progressRows]);
 
-      {initializing ? (
-        <LoadingState label="Restoring session…" />
-      ) : !isAuthenticated ? (
+  if (initializing) return <LoadingState label="Restoring session…" />;
+  if (!isAuthenticated) {
+    return (
+      <div>
+        <PageHeader
+          eyebrow="LearnBridge"
+          title="Learn smarter, not longer"
+          subtitle="Diagnostics find your gaps, the Study Agent builds your plan, and re-assessments prove you improved."
+        />
         <Card title="Sign in required" description="Sign in to see your learning data.">
           <Link
             to="/login"
-            className="inline-block rounded-md bg-brand-500 px-4 py-2 text-sm font-medium text-white hover:bg-brand-600"
+            className="inline-flex h-10 items-center rounded-lg bg-brand-500 px-4 text-sm font-medium text-white shadow-sm transition-colors hover:bg-brand-600"
           >
             Go to sign in
           </Link>
         </Card>
-      ) : (
-        <div className="grid gap-4 md:grid-cols-3">
-          <Card title="Profile" description="Your learner record.">
-            {profile ? (
-              <p className="text-sm text-slate-600">
-                {profile.education_level}
-                {profile.field_of_study ? ` · ${profile.field_of_study}` : ""}
-              </p>
-            ) : (
-              <p className="text-sm text-slate-500">No profile found.</p>
-            )}
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      <PageHeader
+        eyebrow="Overview"
+        title={user ? `${greeting()}, ${user.username}` : "Student Dashboard"}
+        subtitle="Your current situation, what to do next, and how far you've come."
+      />
+      {loading && <LoadingState label="Loading your overview…" />}
+      {!loading && error && <ErrorState message={error} onRetry={() => void loadData()} />}
+      {!loading && !error && (
+        <>
+          <Card
+            title={nextStep.title}
+            description={nextStep.text}
+          >
+            <p className="lb-eyebrow">{nextStep.eyebrow}</p>
+            <Link
+              to={nextStep.to}
+              className="mt-3 inline-flex h-10 items-center gap-2 rounded-lg bg-brand-500 px-4 text-sm font-medium text-white shadow-sm transition-colors hover:bg-brand-600"
+            >
+              {nextStep.cta}
+              <Icon name="arrowRight" className="h-4 w-4" />
+            </Link>
           </Card>
-          <Card title="Learning gaps" description="Diagnosed from assessments.">
-            {dataLoading && <LoadingState label="Loading gaps…" />}
-            {dataError && <ErrorState message={dataError} onRetry={() => void loadData()} />}
-            {!dataLoading && !dataError && data && (
-              <>
-                <p className="text-2xl font-bold">{data.gapCount}</p>
-                {data.gapCount > 0 && (
-                  <Link
-                    to="/agent"
-                    className="mt-2 inline-block rounded-md bg-brand-500 px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-600"
-                  >
-                    Get AI study help
-                  </Link>
-                )}
-              </>
-            )}
-          </Card>
-          <Card title="Study plans" description="Your personalized paths.">
-            {dataLoading && <LoadingState label="Loading plans…" />}
-            {dataError && <ErrorState message={dataError} onRetry={() => void loadData()} />}
-            {!dataLoading && !dataError && data && (
-              <p className="text-2xl font-bold">{data.planCount}</p>
-            )}
-          </Card>
-        </div>
+
+          <div className="mt-4 grid gap-4 sm:grid-cols-3">
+            <Card title="Open gaps" description="Topics to work on.">
+              <p className="text-3xl font-bold tracking-tight">{openGaps.length}</p>
+              <Link to="/agent" className="mt-2 inline-block text-sm font-medium text-brand-600 hover:underline">
+                Review in Study Agent →
+              </Link>
+            </Card>
+            <Card title="Assessments done" description="Completed diagnostics.">
+              <p className="text-3xl font-bold tracking-tight">{attempts.length}</p>
+              {latestAttempt ? (
+                <p className="mt-2 text-sm text-slate-600">
+                  Latest: {latestAttempt.assessment_title} · {latestAttempt.percentage}%
+                </p>
+              ) : (
+                <Link to="/assessment" className="mt-2 inline-block text-sm font-medium text-brand-600 hover:underline">
+                  Take one →
+                </Link>
+              )}
+            </Card>
+            <Card title="Study plans" description="Active and past paths.">
+              <p className="text-3xl font-bold tracking-tight">{plans.length}</p>
+              {activePlan ? (
+                <Link to="/plan" className="mt-2 inline-block text-sm font-medium text-brand-600 hover:underline">
+                  {activePlan.title} →
+                </Link>
+              ) : (
+                <p className="mt-2 text-sm text-slate-500">No active plan yet.</p>
+              )}
+            </Card>
+          </div>
+        </>
       )}
 
-      <div className="mt-4">
-        <Card title="Backend connection" description="Live status of the LearnBridge API.">
-          {healthLoading && <LoadingState label="Checking API health…" />}
-          {!healthLoading && healthError && (
-            <ErrorState message={healthError} onRetry={() => void loadHealth()} />
-          )}
-          {!healthLoading && !healthError && health && (
-            <p className="text-sm text-emerald-700">
-              Connected · status={health.status} · service={health.service}
-            </p>
-          )}
-        </Card>
+      <div className="mt-4 flex items-center gap-2 text-xs text-slate-500">
+        <span
+          aria-hidden="true"
+          className={`inline-block h-2 w-2 rounded-full ${
+            health && !healthError ? "bg-emerald-500" : "bg-slate-300"
+          }`}
+        />
+        {healthError ? (
+          <span>
+            API unreachable.{" "}
+            <button type="button" onClick={() => void loadHealth()} className="font-medium text-brand-600 hover:underline">
+              Retry
+            </button>
+          </span>
+        ) : (
+          <span>Connected{health ? ` to ${health.service}` : "…"}</span>
+        )}
       </div>
     </div>
   );
