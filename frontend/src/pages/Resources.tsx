@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { Card, PageHeader } from "../components/layout/Page";
+import { Button, Field, SelectInput, TextInput } from "../components/ui/controls";
 import { EmptyState, ErrorState, LoadingState } from "../components/ui/States";
 import { useAuth } from "../context/AuthContext";
 import { apiFetch } from "../services/apiClient";
@@ -99,49 +100,47 @@ export function ResourcesPage() {
       />
       <Card title="Filter" description="Filters run against the backend catalog.">
         <div className="flex flex-wrap items-end gap-3">
-          <label className="block text-sm">
-            <span className="mb-1 block font-medium text-slate-700">Subject</span>
-            <input
+          <Field label="Subject">
+            <TextInput
               type="text"
               value={subject}
               onChange={(e) => setSubject(e.target.value)}
               placeholder="e.g. Mathematics"
-              className="w-48 rounded-md border border-slate-300 px-3 py-2 text-sm"
+              className="w-48"
             />
-          </label>
-          <label className="block text-sm">
-            <span className="mb-1 block font-medium text-slate-700">Type</span>
-            <select
+          </Field>
+          <Field label="Type">
+            <SelectInput
               value={resourceType}
               onChange={(e) => setResourceType(e.target.value)}
-              className="rounded-md border border-slate-300 px-3 py-2 text-sm"
             >
               {RESOURCE_TYPES.map((t) => (
                 <option key={t} value={t}>
                   {t === "" ? "All types" : t}
                 </option>
               ))}
-            </select>
-          </label>
-          <button
+            </SelectInput>
+          </Field>
+          <Button
             type="button"
+            variant="secondary"
             onClick={applyFilters}
-            className="rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-700"
+            className="bg-slate-900 text-white hover:bg-slate-700 border-transparent"
           >
             Apply
-          </button>
+          </Button>
           {(subject || resourceType) && (
-            <button
+            <Button
               type="button"
+              variant="secondary"
               onClick={() => {
                 setSubject("");
                 setResourceType("");
                 void load("", "");
               }}
-              className="rounded-md border border-slate-300 px-4 py-2 text-sm font-medium hover:bg-slate-100"
             >
               Clear
-            </button>
+            </Button>
           )}
         </div>
       </Card>
@@ -163,12 +162,12 @@ export function ResourcesPage() {
               const linked = gapContext.get(r.id) ?? [];
               return (
                 <Card key={r.id} title={r.title}>
-                  <div className="flex flex-wrap gap-2 text-xs">
-                    <span className="rounded-full bg-slate-100 px-2.5 py-0.5 font-medium text-slate-600">
+                  <div className="flex flex-wrap gap-1.5 text-xs">
+                    <span className="rounded-md bg-slate-100 px-2 py-0.5 font-medium text-slate-600">
                       {r.resource_type}
                     </span>
                     {r.difficulty && (
-                      <span className="rounded-full bg-slate-100 px-2.5 py-0.5 font-medium text-slate-600">
+                      <span className="rounded-md bg-slate-100 px-2 py-0.5 font-medium text-slate-600">
                         {r.difficulty}
                       </span>
                     )}
@@ -194,7 +193,7 @@ export function ResourcesPage() {
                       Open resource
                     </a>
                   ) : (
-                    <p className="mt-2 text-xs text-slate-400">No link provided</p>
+                    <p className="mt-2 text-xs text-slate-500">No link provided</p>
                   )}
                 </Card>
               );

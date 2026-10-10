@@ -4,6 +4,7 @@ import { Card, PageHeader } from "../components/layout/Page";
 import { EmptyState, ErrorState, LoadingState } from "../components/ui/States";
 import { useAuth } from "../context/AuthContext";
 import { apiFetch } from "../services/apiClient";
+import { changeText, summarizeAttempts } from "../services/attemptHistory";
 import type {
   Assessment,
   Attempt,
@@ -12,7 +13,7 @@ import type {
   Progress,
   StudyPlan,
 } from "../types/domain";
-import { StatusBadge } from "./Agent";
+import { StatusBadge } from "../components/ui/StatusBadge";
 
 function isActiveGap(g: LearningGap): boolean {
   return g.status === "open" || g.status === "in_progress";
@@ -77,6 +78,8 @@ export function ProgressPage() {
     [progressRows],
   );
 
+  const assessmentHistory = useMemo(() => summarizeAttempts(attempts), [attempts]);
+
   const planStats = useMemo(() => {
     if (!currentPlan) return null;
     const items = [...(currentPlan.items ?? [])].sort((a, b) => a.ordering - b.ordering);
@@ -138,11 +141,11 @@ export function ProgressPage() {
           <Card title="Learning summary" description="Totals across your account.">
             <dl className="grid gap-3 text-sm sm:grid-cols-2 lg:grid-cols-4">
               <div className="rounded-md border border-slate-200 p-3">
-                <dt className="text-xs uppercase tracking-wide text-slate-400">Assessments completed</dt>
+                <dt className="text-xs uppercase tracking-wide text-slate-500">Assessments completed</dt>
                 <dd className="text-2xl font-bold">{attempts.length}</dd>
               </div>
               <div className="rounded-md border border-slate-200 p-3">
-                <dt className="text-xs uppercase tracking-wide text-slate-400">Latest score</dt>
+                <dt className="text-xs uppercase tracking-wide text-slate-500">Latest score</dt>
                 <dd className="text-2xl font-bold">
                   {latestAttempt ? `${latestAttempt.percentage}%` : "—"}
                 </dd>
@@ -153,11 +156,11 @@ export function ProgressPage() {
                 )}
               </div>
               <div className="rounded-md border border-slate-200 p-3">
-                <dt className="text-xs uppercase tracking-wide text-slate-400">Active gaps</dt>
+                <dt className="text-xs uppercase tracking-wide text-slate-500">Active gaps</dt>
                 <dd className="text-2xl font-bold">{activeGaps.length}</dd>
               </div>
               <div className="rounded-md border border-slate-200 p-3">
-                <dt className="text-xs uppercase tracking-wide text-slate-400">Current plan</dt>
+                <dt className="text-xs uppercase tracking-wide text-slate-500">Current plan</dt>
                 <dd className="text-sm font-semibold">
                   {currentPlan ? (
                     <Link to="/plan" className="text-brand-600 hover:underline">
@@ -175,6 +178,34 @@ export function ProgressPage() {
               </div>
             </dl>
           </Card>
+
+          {assessmentHistory.length > 0 && (
+            <Card title="Assessment history" description="Baseline vs latest per assessment.">
+              <ul className="space-y-2">
+                {assessmentHistory.map((h) => (
+                  <li
+                    key={h.assessmentId}
+                    className="rounded-md border border-slate-200 px-3 py-2 text-sm"
+                  >
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div>
+                        <p className="font-medium">{h.title}</p>
+                        <p className="text-xs text-slate-500">
+                          {assessmentsById.get(h.assessmentId)?.subject ?? "—"} ·{" "}
+                          {h.count} attempt{h.count === 1 ? "" : "s"} · Best {h.best.percentage}%
+                        </p>
+                      </div>
+                      <span className="font-bold">{changeText(h)}</span>
+                    </div>
+                    <p className="mt-1 text-xs text-slate-500">
+                      Baseline: {h.baseline.percentage}% ({h.baseline.score}/{h.baseline.question_count})
+                      {" · "}Latest: {h.latest.percentage}% ({h.latest.score}/{h.latest.question_count})
+                    </p>
+                  </li>
+                ))}
+              </ul>
+            </Card>
+          )}
 
           {attempts.length > 0 && (
             <Card title="Assessment performance" description="Your completed attempts.">
@@ -210,7 +241,7 @@ export function ProgressPage() {
                         {g.subject} / {g.topic}
                       </span>
                       <StatusBadge status={g.status} />
-                      <span className="text-xs text-slate-400">({g.severity})</span>
+                      <span className="text-xs text-slate-500">({g.severity})</span>
                     </div>
                     {g.evidence && <p className="mt-1 text-xs text-slate-500">{g.evidence}</p>}
                   </li>
