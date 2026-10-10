@@ -200,3 +200,93 @@ class AttemptOwnershipTests(APITestCase):
         response = self.bob_client.get("/api/v1/attempts/")
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(len(response.data["results"]), 0)
+
+
+class ReassessmentTests(APITestCase):
+    """Attempt 1 (baseline) → study → Attempt 2. History must be preserved."""
+
+    def setUp(self):
+        self.user = make_user("ada")
+        self.client = auth_client(self.user)
+        self.assessment = make_assessment()
+        self.q1 = make_question(self.assessment, ordering=1, topic="linear equations", correct="B")
+        self.q2 = make_question(
+            self.assessment, ordering=2, topic="fractions", correct="true",
+            question_type="true_false",
+        )
+
+    def complete_attempt(self, answers):
+        attempt_id = self.client.post(
+            f"/api/v1/assessments/{self.assessment.id}/start/"
+        ).data["id"]
+        self.client.post(
+            f"/api/v1/attempts/{attempt_id}/answers/",
+            {"answers": answers},
+            format="json",
+        )
+        return self.client.post(f"/api/v1/attempts/{attempt_id}/complete/").data
+
+    def test_second_attempt_allowed_after_completion(self):
+        first = self.complete_attempt([
+            {"question": self.q1.id, "answer": "B"},
+            {"question": self.q2.id, "answer": "false"},
+        ])
+        self.assertEqual(first["percentage"], 50.0)
+        response = self.client.post(f"/api/v1/assessments/{self.assessment.id}/start/")
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertNotEqual(response.data["id"], first["id"])
+
+    def test_both_attempts_preserved_with_own_scores(self):
+        first = self.complete_attempt([
+            {"question": self.q1.id, "answer": "wrong"},
+            {"question": self.q2.id, "answer": "true"},
+        ])
+        second = self.complete_attempt([
+            {"question": self.q1.id, "answer": "B"},
+            {"question": self.q2.id, "answer": "true"},
+        ])
+        self.assertEqual(first["score"], 1)
+        self.assertEqual(second["score"], 2)
+        self.assertEqual(second["percentage"], 100.0)
+        history = self.client.get(
+            f"/api/v1/attempts/?assessment={self.assessment.id}&status=completed"
+        ).data["results"]
+        self.assertEqual(len(history), 2)
+        by_id = {a["id"]: a for a in history}
+        self.assertEqual(by_id[first["id"]]["percentage"], 50.0)
+        self.assertEqual(by_id[second["id"]]["percentage"], 100.0)
+
+    def test_incomplete_attempt_excluded_from_completed_history(self):
+        self.complete_attempt([
+            {"question": self.q1.id, "answer": "B"},
+            {"question": self.q2.id, "answer": "false"},
+        ])
+        self.client.post(f"/api/v1/assessments/{self.assessment.id}/start/")
+        completed = self.client.get("/api/v1/attempts/?status=completed").data["results"]
+        self.assertEqual(len(completed), 1)
+
+    def test_gap_evidence_refreshes_on_reassessment(self):
+        self.complete_attempt([
+            {"question": self.q1.id, "answer": "B"},
+            {"question": self.q2.id, "answer": "false"},
+        ])
+        first_gap = self.client.get("/api/v1/gaps/").data["results"][0]
+        second = self.complete_attempt([
+            {"question": self.q1.id, "answer": "B"},
+            {"question": self.q2.id, "answer": "nope"},
+        ])
+        gaps = self.client.get("/api/v1/gaps/").data["results"]
+        self.assertEqual(len(gaps), 1)  # same topic gap, refreshed — not duplicated
+        self.assertEqual(gaps[0]["id"], first_gap["id"])
+        self.assertIn(f"Attempt {second['id']}", gaps[0]["evidence"])
+
+    def test_other_student_history_isolated(self):
+        self.complete_attempt([
+            {"question": self.q1.id, "answer": "B"},
+            {"question": self.q2.id, "answer": "false"},
+        ])
+        bob_client = auth_client(make_user("bob"))
+        history = bob_client.get(
+            f"/api/v1/attempts/?assessment={self.assessment.id}&status=completed"
+        ).data["results"]
+        self.assertEqual(history, [])
