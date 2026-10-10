@@ -1,10 +1,14 @@
 import { useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { Card, PageHeader } from "../components/layout/Page";
+import { Button } from "../components/ui/controls";
+import { Icon } from "../components/ui/icons";
 import { EmptyState, ErrorState, LoadingState } from "../components/ui/States";
 import { useAuth } from "../context/AuthContext";
 import { apiFetch } from "../services/apiClient";
 import type { AgentRun, LearningGap, Paginated } from "../types/domain";
+
+export { StatusBadge } from "../components/ui/StatusBadge";
 
 const KIND_LABELS: Record<string, string> = {
   started: "Agent started",
@@ -77,11 +81,11 @@ export function AgentPage() {
   if (!isAuthenticated) {
     return (
       <div>
-        <PageHeader title="Study Agent" subtitle="Sign in to get AI study help." />
+        <PageHeader eyebrow="Assistant" title="Study Agent" subtitle="Sign in to get AI study help." />
         <Card title="Sign in required">
           <Link
             to="/login"
-            className="inline-block rounded-md bg-brand-500 px-4 py-2 text-sm font-medium text-white hover:bg-brand-600"
+            className="inline-flex h-10 items-center rounded-lg bg-brand-500 px-4 text-sm font-medium text-white shadow-sm transition-colors hover:bg-brand-600"
           >
             Go to sign in
           </Link>
@@ -93,97 +97,135 @@ export function AgentPage() {
   return (
     <div>
       <PageHeader
+        eyebrow="Assistant"
         title="Study Agent"
-        subtitle="The agent examines your gaps, researches resources, and builds a plan."
+        subtitle="Tell it which gaps to work on — it researches material and builds your plan."
       />
       {loading && <LoadingState label="Loading gaps and runs…" />}
       {!loading && error && <ErrorState message={error} onRetry={() => void load()} />}
       {!loading && !error && (
-        <div className="space-y-4">
-          <Card title="Start a run" description="Select the gaps to address (all open by default).">
-            {gaps.length === 0 ? (
-              <>
-                <EmptyState title="No open gaps" hint="Take an assessment to identify areas to work on." />
-                <Link
-                  to="/assessment"
-                  className="mt-3 inline-block rounded-md bg-brand-500 px-4 py-2 text-sm font-medium text-white hover:bg-brand-600"
-                >
-                  Take an assessment
-                </Link>
-              </>
-            ) : (
-              <>
-                <ul className="space-y-1">
-                  {gaps.map((g) => (
-                    <li key={g.id}>
-                      <label className="flex items-center gap-2 text-sm">
-                        <input
-                          type="checkbox"
-                          checked={selected.includes(g.id)}
-                          onChange={() => toggle(g.id)}
-                        />
-                        {g.subject} / {g.topic}
-                        <span className="text-xs text-slate-400">({g.severity})</span>
-                      </label>
+        <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)]">
+          <div className="space-y-4">
+            <Card
+              title="What should I work on?"
+              description="Select the gaps to address (all open by default)."
+            >
+              {gaps.length === 0 ? (
+                <>
+                  <EmptyState title="No open gaps" hint="Take an assessment to identify areas to work on." />
+                  <Link
+                    to="/assessment"
+                    className="mt-3 inline-flex h-10 items-center gap-2 rounded-lg bg-brand-500 px-4 text-sm font-medium text-white shadow-sm transition-colors hover:bg-brand-600"
+                  >
+                    Take an assessment
+                    <Icon name="arrowRight" className="h-4 w-4" />
+                  </Link>
+                </>
+              ) : (
+                <>
+                  <fieldset>
+                    <legend className="sr-only">Gaps to address</legend>
+                    <ul className="divide-y divide-slate-100 rounded-lg border border-slate-200">
+                      {gaps.map((g) => (
+                        <li key={g.id}>
+                          <label className="flex cursor-pointer items-center gap-3 px-3.5 py-2.5 text-sm transition-colors hover:bg-slate-50">
+                            <input
+                              type="checkbox"
+                              checked={selected.includes(g.id)}
+                              onChange={() => toggle(g.id)}
+                              className="h-4 w-4 shrink-0 accent-[#2f5bff]"
+                            />
+                            <span className="min-w-0 flex-1">
+                              <span className="block truncate font-medium text-slate-900">
+                                {g.subject} / {g.topic}
+                              </span>
+                              <span className="block text-xs capitalize text-slate-500">{g.severity} priority</span>
+                            </span>
+                          </label>
+                        </li>
+                      ))}
+                    </ul>
+                  </fieldset>
+                  {startError && (
+                    <div className="mt-3">
+                      <ErrorState message={startError} />
+                    </div>
+                  )}
+                  <Button onClick={() => void startRun()} disabled={starting || selected.length === 0} className="mt-4 w-full">
+                    {starting ? (
+                      <>Working — researching and planning…</>
+                    ) : (
+                      <>
+                        <Icon name="agent" className="h-4 w-4" />
+                        Build my study plan ({selected.length})
+                      </>
+                    )}
+                  </Button>
+                  <p className="mt-2 text-xs leading-relaxed text-slate-500">
+                    Runs usually take under a minute. Results stay on this page.
+                  </p>
+                </>
+              )}
+            </Card>
+
+            <Card title="Past runs" description="Every run keeps its observable step history.">
+              {runs.length === 0 ? (
+                <EmptyState title="No runs yet" hint="Your completed runs will appear here." />
+              ) : (
+                <ul className="max-h-72 space-y-1 overflow-y-auto pr-1">
+                  {runs.map((r) => (
+                    <li key={r.id}>
+                      <button
+                        type="button"
+                        onClick={() => setActiveRun(r)}
+                        aria-pressed={activeRun?.id === r.id}
+                        className={`flex w-full items-center justify-between gap-2 rounded-lg border px-3 py-2 text-sm transition-colors ${
+                          activeRun?.id === r.id
+                            ? "border-brand-500 bg-brand-50 font-medium"
+                            : "border-slate-200 hover:bg-slate-50"
+                        }`}
+                      >
+                        <span className="truncate">
+                          Run #{r.id} · {r.purpose.replace(/_/g, " ")}
+                        </span>
+                        <RunStatus status={r.status} />
+                      </button>
                     </li>
                   ))}
                 </ul>
-                {startError && (
-                  <div className="mt-3">
-                    <ErrorState message={startError} />
-                  </div>
-                )}
-                <button
-                  type="button"
-                  onClick={() => void startRun()}
-                  disabled={starting || selected.length === 0}
-                  className="mt-3 rounded-md bg-brand-500 px-4 py-2 text-sm font-medium text-white hover:bg-brand-600 disabled:opacity-50"
-                >
-                  {starting ? "Agent is working…" : "Run study agent"}
-                </button>
-              </>
-            )}
-          </Card>
+              )}
+            </Card>
+          </div>
 
-          {activeRun && <RunDetail run={activeRun} gaps={gaps} />}
-
-          <Card title="Past runs" description="Every run keeps its observable step history.">
-            {runs.length === 0 ? (
-              <EmptyState title="No runs yet" hint="Start your first run above." />
+          <div className="lg:sticky lg:top-20">
+            {activeRun ? (
+              <RunDetail run={activeRun} gaps={gaps} />
             ) : (
-              <ul className="space-y-2">
-                {runs.map((r) => (
-                  <li key={r.id}>
-                    <button
-                      type="button"
-                      onClick={() => setActiveRun(r)}
-                      className="flex w-full items-center justify-between rounded-md border border-slate-200 px-3 py-2 text-sm hover:bg-slate-50"
-                    >
-                      <span>
-                        Run #{r.id} · {r.purpose}
-                      </span>
-                      <StatusBadge status={r.status} />
-                    </button>
-                  </li>
-                ))}
-              </ul>
+              <Card title="Run activity" description="Select a past run, or start a new one to see each step here.">
+                <EmptyState title="Nothing selected" hint="Agent steps, results, and plan links appear in this panel." />
+              </Card>
             )}
-          </Card>
+          </div>
         </div>
       )}
     </div>
   );
 }
 
-export function StatusBadge({ status }: { status: string }) {
-  const color =
+function RunStatus({ status }: { status: string }) {
+  const dot =
     status === "succeeded"
-      ? "bg-emerald-50 text-emerald-700"
+      ? "bg-emerald-500"
       : status === "failed"
-        ? "bg-red-50 text-red-700"
-        : "bg-slate-100 text-slate-600";
+        ? "bg-red-500"
+        : status === "running"
+          ? "bg-brand-500 animate-pulse"
+          : "bg-slate-300";
   return (
-    <span className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${color}`}>{status}</span>
+    <span className="inline-flex shrink-0 items-center gap-1.5 text-xs font-medium text-slate-600">
+      <span aria-hidden="true" className={`h-2 w-2 rounded-full ${dot}`} />
+      {status.replace(/_/g, " ")}
+    </span>
   );
 }
 
@@ -211,62 +253,62 @@ export function RunDetail({ run, gaps }: { run: AgentRun; gaps: LearningGap[] })
         .filter((g): g is LearningGap => g !== undefined)
     : [];
   return (
-    <Card title={`Run #${run.id}`} description={`Status: ${run.status}`}>
+    <Card title={`Run #${run.id}`} description={`Status: ${run.status.replace(/_/g, " ")}`}>
       {planReady && (
-        <div className="mb-4 rounded-lg border border-emerald-200 bg-emerald-50 p-4">
-          <p className="text-base font-semibold text-emerald-900">
+        <div className="mb-4 rounded-xl border border-emerald-600/20 bg-emerald-50 p-4 sm:p-5">
+          <p className="flex items-center gap-2 text-[15px] font-bold text-emerald-900">
+            <Icon name="check" className="h-5 w-5" />
             Your personalized study plan is ready.
           </p>
-          <p className="mt-1 text-sm text-emerald-800">
+          <p className="mt-1 text-sm leading-relaxed text-emerald-800">
             {addressed.length > 0
               ? `Built from ${addressed.length} learning gap${addressed.length === 1 ? "" : "s"}: ${addressed
                   .map((g) => `${g.subject} · ${g.topic}`)
                   .join("; ")}.`
               : "Built from your current learning gaps."}
           </p>
-          <Link
-            to="/plan"
-            className="mt-3 inline-block rounded-md bg-emerald-700 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-800"
-          >
-            View my study plan →
-          </Link>
+          <div className="mt-3 flex flex-wrap gap-2">
+            <Link
+              to="/plan"
+              className="inline-flex h-10 items-center gap-2 rounded-lg bg-emerald-700 px-4 text-sm font-medium text-white shadow-sm transition-colors hover:bg-emerald-800"
+            >
+              View my study plan
+              <Icon name="arrowRight" className="h-4 w-4" />
+            </Link>
+            {typeof result?.report_id === "number" && (
+              <Link
+                to={`/reports/${result.report_id}`}
+                className="inline-flex h-10 items-center rounded-lg border border-emerald-600/30 bg-white px-4 text-sm font-medium text-emerald-800 transition-colors hover:bg-emerald-50"
+              >
+                View report
+              </Link>
+            )}
+          </div>
         </div>
       )}
       {run.status === "failed" && error?.message && (
-        <div className="mb-3">
+        <div className="mb-4">
           <ErrorState message={`${error.step ?? "run"}: ${error.message}`} />
         </div>
       )}
-      <ol className="space-y-2">
+      <ol className="relative space-y-4 border-l-2 border-slate-200 pl-5">
         {run.events.map((e) => (
-          <li key={e.id} className="flex gap-3 text-sm">
-            <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-brand-50 text-[10px] font-bold text-brand-700">
-              {e.seq}
+          <li key={e.id} className="relative text-sm">
+            <span
+              aria-hidden="true"
+              className={`absolute -left-[27px] top-0.5 flex h-4 w-4 items-center justify-center rounded-full ring-4 ring-white ${
+                e.kind === "failed" ? "bg-red-500" : e.kind === "completed" ? "bg-emerald-500" : "bg-brand-500"
+              }`}
+            >
+              {e.kind === "completed" && <Icon name="check" className="h-2.5 w-2.5 text-white" />}
             </span>
-            <div>
-              <p className="font-medium">{KIND_LABELS[e.kind] ?? e.kind}</p>
-              <p className="text-slate-600">{e.summary}</p>
-            </div>
+            <p className="font-semibold text-slate-900">{KIND_LABELS[e.kind] ?? e.kind}</p>
+            <p className="mt-0.5 leading-relaxed text-slate-600">{e.summary}</p>
           </li>
         ))}
       </ol>
-      {run.status === "succeeded" && (
-        <div className="mt-3 flex flex-wrap gap-2 text-sm">
-          {typeof result?.plan_id === "number" && (
-            <Link to="/plan" className="rounded-md bg-slate-900 px-3 py-1.5 text-white">
-              View study plan
-            </Link>
-          )}
-          {typeof result?.report_id === "number" && (
-            <Link
-              to={`/reports/${result.report_id}`}
-              className="rounded-md border border-slate-300 px-3 py-1.5 hover:bg-slate-100"
-            >
-              View learning report
-            </Link>
-          )}
-          {result?.message && <p className="text-slate-600">{result.message}</p>}
-        </div>
+      {run.status === "succeeded" && !planReady && result?.message && (
+        <p className="mt-3 text-sm text-slate-600">{result.message}</p>
       )}
     </Card>
   );
