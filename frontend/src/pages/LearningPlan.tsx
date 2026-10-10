@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { Card, PageHeader } from "../components/layout/Page";
+import { SelectInput } from "../components/ui/controls";
 import { EmptyState, ErrorState, LoadingState } from "../components/ui/States";
 import { useAuth } from "../context/AuthContext";
 import { apiFetch } from "../services/apiClient";
@@ -12,7 +13,7 @@ import type {
   StudyPlan,
   StudyPlanItem,
 } from "../types/domain";
-import { StatusBadge } from "./Agent";
+import { StatusBadge } from "../components/ui/StatusBadge";
 
 function isActive(plan: StudyPlan): boolean {
   return plan.status === "active";
@@ -238,10 +239,10 @@ export function LearningPlanPage() {
         <div className="space-y-4">
           {plans.length > 1 && (
             <Card title="Your plans" description="Switch between your study plans.">
-              <select
+              <SelectInput
                 value={selectedId ?? ""}
                 onChange={(e) => setSelectedId(Number(e.target.value))}
-                className="w-full max-w-md rounded-md border border-slate-300 px-3 py-2 text-sm"
+                className="max-w-md"
                 aria-label="Select study plan"
               >
                 {plans.map((p) => (
@@ -249,7 +250,7 @@ export function LearningPlanPage() {
                     {p.title} ({p.status})
                   </option>
                 ))}
-              </select>
+              </SelectInput>
             </Card>
           )}
           {detailLoading && <LoadingState label="Loading plan details…" />}
@@ -275,11 +276,11 @@ export function LearningPlanPage() {
                 </div>
                 <dl className="mt-3 grid gap-2 text-sm text-slate-600 sm:grid-cols-2">
                   <div>
-                    <dt className="text-xs uppercase tracking-wide text-slate-400">Start date</dt>
+                    <dt className="text-xs uppercase tracking-wide text-slate-500">Start date</dt>
                     <dd>{plan.start_date || "—"}</dd>
                   </div>
                   <div>
-                    <dt className="text-xs uppercase tracking-wide text-slate-400">Target date</dt>
+                    <dt className="text-xs uppercase tracking-wide text-slate-500">Target date</dt>
                     <dd>{plan.target_date || "—"}</dd>
                   </div>
                 </dl>
@@ -297,14 +298,16 @@ export function LearningPlanPage() {
                 </Link>
               </Card>
 
-              <NextUpCard
-                items={items}
-                gapsById={gapsById}
-                resourcesById={resourcesById}
-                progressByItem={progressByItem}
-                onMarkComplete={(itemId) => void markComplete(itemId)}
-                completingId={completingId}
-              />
+              <div className="rounded-xl ring-2 ring-brand-500/25">
+                <NextUpCard
+                  items={items}
+                  gapsById={gapsById}
+                  resourcesById={resourcesById}
+                  progressByItem={progressByItem}
+                  onMarkComplete={(itemId) => void markComplete(itemId)}
+                  completingId={completingId}
+                />
+              </div>
 
               {actionError && (
                 <ErrorState message={actionError} />
@@ -323,7 +326,8 @@ export function LearningPlanPage() {
                     const done = progress?.status === "completed";
                     const busy = completingId === item.id;
                     return (
-                      <Card key={item.id} title={`Step ${item.ordering}: ${item.title}`}>
+                      <div key={item.id} className={done ? "opacity-70" : undefined}>
+                      <Card title={`Step ${item.ordering}: ${item.title}`}>
                         <div className="flex flex-wrap items-center gap-2">
                           <StatusBadge status={progress?.status ?? item.status} />
                           {typeof progress?.completion_percentage === "number" && (
@@ -338,7 +342,7 @@ export function LearningPlanPage() {
                         {gap && (
                           <p className="mt-1 text-sm text-slate-600">
                             <span className="font-medium">Related gap:</span> {gap.subject} / {gap.topic}{" "}
-                            <span className="text-xs text-slate-400">({gap.severity})</span>
+                            <span className="text-xs text-slate-500">({gap.severity})</span>
                           </p>
                         )}
                         {item.rationale && (
@@ -368,7 +372,7 @@ export function LearningPlanPage() {
                                 Open resource →
                               </a>
                             ) : (
-                              <p className="mt-1 text-xs text-slate-400">No link provided for this resource</p>
+                              <p className="mt-1 text-xs text-slate-500">No link provided for this resource</p>
                             )}
                           </div>
                         )}
@@ -383,9 +387,12 @@ export function LearningPlanPage() {
                           </button>
                         )}
                         {done && (
-                          <p className="mt-3 text-sm font-medium text-emerald-700">Completed ✓</p>
+                          <p className="mt-3 inline-flex items-center gap-1.5 text-sm font-medium text-emerald-700">
+                            <span aria-hidden="true">✓</span> Completed
+                          </p>
                         )}
                       </Card>
+                      </div>
                     );
                   })}
                 </div>
