@@ -6,7 +6,7 @@ Secrets and URLs come from environment (.env supported). No hardcoded keys.
 import os
 from datetime import timedelta
 from pathlib import Path
-from urllib.parse import urlparse
+from urllib.parse import parse_qs, urlparse
 
 from dotenv import load_dotenv
 
@@ -30,6 +30,13 @@ CORS_ALLOWED_ORIGINS = [
     for o in _env(
         "DJANGO_CORS_ALLOWED_ORIGINS", "http://localhost:5173,http://127.0.0.1:5173"
     ).split(",")
+    if o.strip()
+]
+# Origins trusted for unsafe requests (Django admin login, session auth). Behind
+# HTTPS on a host like Render, the public API URL must be listed here.
+CSRF_TRUSTED_ORIGINS = [
+    o.strip()
+    for o in _env("DJANGO_CSRF_TRUSTED_ORIGINS", "").split(",")
     if o.strip()
 ]
 
@@ -62,6 +69,8 @@ INSTALLED_APPS = [
 MIDDLEWARE = [
     "corsheaders.middleware.CorsMiddleware",
     "django.middleware.security.SecurityMiddleware",
+    # Serves collected static files (admin CSS, DRF browsable UI) in production.
+    "whitenoise.middleware.WhiteNoiseMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
@@ -96,7 +105,7 @@ def _database_config():
     url = _env("DATABASE_URL", "").strip()
     if url.startswith(("postgres://", "postgresql://")):
         p = urlparse(url)
-        return {
+        config = {
             "ENGINE": "django.db.backends.postgresql",
             "NAME": p.path.lstrip("/"),
             "USER": p.username,
@@ -104,6 +113,11 @@ def _database_config():
             "HOST": p.hostname or "",
             "PORT": str(p.port or ""),
         }
+        # Managed hosts (Render, etc.) append ?sslmode=require.
+        sslmode = parse_qs(p.query).get("sslmode", [None])[0]
+        if sslmode:
+            config["OPTIONS"] = {"sslmode": sslmode}
+        return config
     return {
         "ENGINE": "django.db.backends.sqlite3",
         "NAME": BASE_DIR / "db.sqlite3",
@@ -125,8 +139,24 @@ USE_I18N = True
 USE_TZ = True
 
 STATIC_URL = "static/"
+# collectstatic target; WhiteNoise serves this directory in production.
+STATIC_ROOT = BASE_DIR / "staticfiles"
+STORAGES = {
+    "default": {"BACKEND": "django.core.files.storage.FileSystemStorage"},
+    "staticfiles": {"BACKEND": "whitenoise.storage.CompressedStaticFilesStorage"},
+}
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
+
+# --- Production hardening (no-ops while DEBUG=True) ---
+# Render terminates TLS and forwards X-Forwarded-Proto.
+SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+if not DEBUG:
+    SESSION_COOKIE_SECURE = True
+    CSRF_COOKIE_SECURE = True
+    SECURE_CONTENT_TYPE_NOSNIFF = True
+    SECURE_REFERRER_POLICY = "same-origin"
+    X_FRAME_OPTIONS = "DENY"
 
 REST_FRAMEWORK = {
     "DEFAULT_RENDERER_CLASSES": ["rest_framework.renderers.JSONRenderer"],
