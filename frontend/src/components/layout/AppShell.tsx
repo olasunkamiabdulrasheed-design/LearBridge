@@ -5,7 +5,7 @@ import { useAuth } from "../../context/AuthContext";
 import { Icon, type IconName } from "../ui/icons";
 
 const NAV: Array<{ to: string; label: string; hint: string; icon: IconName; end?: boolean }> = [
-  { to: "/", label: "Dashboard", hint: "Overview", icon: "dashboard", end: true },
+  { to: "/dashboard", label: "Dashboard", hint: "Overview", icon: "dashboard", end: true },
   { to: "/assessment", label: "Assessments", hint: "Take diagnostics", icon: "assessment" },
   { to: "/agent", label: "Study Agent", hint: "Get recommendations", icon: "agent" },
   { to: "/plan", label: "Learning Plan", hint: "Follow your path", icon: "plan" },
@@ -28,7 +28,11 @@ export function Navbar({ onMenuToggle }: { onMenuToggle: () => void }) {
         >
           <Icon name="menu" className="h-5 w-5" />
         </button>
-        <Link to="/" className="flex items-center gap-2.5" aria-label={`${APP_NAME} home`}>
+        <Link
+          to={isAuthenticated ? "/dashboard" : "/"}
+          className="flex items-center gap-2.5"
+          aria-label={`${APP_NAME} home`}
+        >
           <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-brand-500 text-base font-bold text-white shadow-sm">
             L
           </span>
