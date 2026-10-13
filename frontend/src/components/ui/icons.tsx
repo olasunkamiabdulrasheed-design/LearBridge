@@ -119,6 +119,22 @@ const PATHS: Record<string, React.ReactNode> = {
   play: (
     <path strokeLinecap="round" strokeLinejoin="round" d="M6 4l14 8-14 8V4z" />
   ),
+  chevronDown: (
+    <path strokeLinecap="round" strokeLinejoin="round" d="M6 9l6 6 6-6" />
+  ),
+  target: (
+    <>
+      <circle cx="12" cy="12" r="9" />
+      <circle cx="12" cy="12" r="4.5" />
+      <circle cx="12" cy="12" r="1" />
+    </>
+  ),
+  compass: (
+    <>
+      <circle cx="12" cy="12" r="9" />
+      <path strokeLinecap="round" strokeLinejoin="round" d="M15.5 8.5l-2 5-5 2 2-5 5-2z" />
+    </>
+  ),
 };
 
 export type IconName = keyof typeof PATHS;
